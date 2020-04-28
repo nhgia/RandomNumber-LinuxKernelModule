@@ -3,6 +3,9 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
+#include <linux/uaccess.h>
+#include <linux/random.h>
+#include <linux/cdev.h>
 
 #define DRIVER_AUTHOR		"Nguyen Hoang Gia <1751064> Pham Bao Duy <1751063>"
 #define DRIVER_DESC 		"Project 1 Random Number Generator"
@@ -13,6 +16,7 @@ struct _rndnum_drv {
 	dev_t dev_num;
 	struct class *dev_class;
 	struct device *dev;
+	struct cdev c_cdev;
 }_rndnum_drv;
 
 // ------------ Function declaration, header file ------------
@@ -42,12 +46,20 @@ static int __init init_project(void)
 		return devNum;
    	}
 
+	// Create cdev
+	cdev_init(&_rndnum_drv.c_cdev, &fops); 
+	if (cdev_add(&_rndnum_drv.c_cdev, _rndnum_drv.dev_num, 1) < 0) {
+		printk("Failed to add the device to the system\n");
+		unregister_chrdev_region(_rndnum_drv.dev_num, 1);
+		return -1;
+        }
+
 	// Create device class
 	_rndnum_drv.dev_class = class_create(THIS_MODULE, DEVICE_CLASS_NAME);
 	if (_rndnum_drv.dev_class == NULL) {
 		printk("Create device class failed.\n");
 		unregister_chrdev_region(_rndnum_drv.dev_num, 1);
-		return 0;
+		return -1;
 	};
 
 	// Create device
@@ -56,7 +68,7 @@ static int __init init_project(void)
 		printk("Create device failed.\n");
 		class_destroy(_rndnum_drv.dev_class);
 		unregister_chrdev_region(_rndnum_drv.dev_num, 1);
-		return 0;
+		return -1;
 	};
 
 	printk("RndNum initialized successfully.\n");
@@ -72,6 +84,9 @@ static void __exit exit_project(void)
 	device_destroy(_rndnum_drv.dev_class, _rndnum_drv.dev_num);
 	class_destroy(_rndnum_drv.dev_class);
 	
+	// Release cdev
+	cdev_del(&_rndnum_drv.c_cdev);
+
 	// Release device number
 	unregister_chrdev_region(_rndnum_drv.dev_num, 1);
 	printk("RndNum removed and un-plugged successfully.\n");
@@ -103,13 +118,11 @@ static ssize_t 	device_read(struct file *fileProcess,
 		loff_t *offset)  // Offset
 {
 	int rand = 0; // This is the random number
-	int MAX_VALUE = sizeof(int) - 1; // Max value of random
 	get_random_bytes(&rand, sizeof(rand)); // Get random bytes and assign it to 'rand'
-	rand = rand % MAX_VALUE // The 'rand' variable cannot exceed max value
-
+	printk("Random generated: %d \n", rand);
 	// Copy value to user space
-	int copyToUser = copy_to_user(usr_space, &rand, sizeof(rand));
-	if (copyToUser != 0) {
+	int sendValue = copy_to_user(buffer, &rand, sizeof(rand));
+	if (sendValue != 0) {
 		// error cause copy failed
 		printk("Copy random number value to user space failed.\n");
 		return 0;
