@@ -102,28 +102,23 @@ static ssize_t 	device_read(struct file *fileProcess,
 		size_t length,   // Buffer length
 		loff_t *offset)  // Offset
 {
-   /* Number of bytes actually written to the buffer */
-   int bytes_read = 0;
+	int rand = 0; // This is the random number
+	int MAX_VALUE = sizeof(int) - 1; // Max value of random
+	get_random_bytes(&rand, sizeof(rand)); // Get random bytes and assign it to 'rand'
+	rand = rand % MAX_VALUE // The 'rand' variable cannot exceed max value
 
-   /* If we're at the end of the message, return 0 signifying end of file */
-   if (*msg_Ptr == 0) return 0;
-
-   /* Actually put the data into the buffer */
-   while (length && *msg_Ptr)  {
-
-        /* The buffer is in the user data segment, not the kernel segment;
-         * assignment won't work.  We have to use put_user which copies data from
-         * the kernel data segment to the user data segment. */
-         put_user(*(msg_Ptr++), buffer++);
-
-         length--;
-         bytes_read++;
-   }
-
-   /* Most read functions return the number of bytes put into the buffer */
-   return bytes_read;
+	// Copy value to user space
+	int copyToUser = copy_to_user(usr_space, &rand, sizeof(rand));
+	if (copyToUser != 0) {
+		// error cause copy failed
+		printk("Copy random number value to user space failed.\n");
+		return 0;
+	}
+	else {
+		printk("Copy random number value to user space succeed.\n");
+		return 0;
+	};
 }
-
 
 
 module_init(init_project);
